@@ -205,6 +205,8 @@ function readForm(){
   if(result.body_ar===null||result.body_ar===undefined)result.body_ar='';
   if(result.body_en===null||result.body_en===undefined)result.body_en='';
  }
+ // sort_order is NOT NULL in productions; default new records to the end (0).
+ if(currentSection==='productions'&&(result.sort_order===null||result.sort_order===undefined))result.sort_order=0;
  if(currentSection==='news_posts'&&result.status==='published'&&!result.published_at)result.published_at=new Date().toISOString();
  if(currentSection==='app_announcements'&&result.is_published&&!result.publish_at)result.publish_at=new Date().toISOString();
  if(currentSection==='festival_events'&&result.edition_id==='')throw new Error('اختر دورة المهرجان المرتبطة بالفعالية.');
