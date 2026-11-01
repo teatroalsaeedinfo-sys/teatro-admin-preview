@@ -68,6 +68,7 @@
       <button class="navbtn" data-section="workshops">الورش</button>
       <button class="navbtn" data-section="open_calls">دعوات المشاركة</button>
       <button class="navbtn" data-section="app_announcements">إعلانات التطبيق</button>
+      <button class="navbtn owner-only" data-section="admin_members">إدارة المستخدمين</button>
     </aside>
     <section>
       <div class="content-head">
@@ -117,10 +118,11 @@ const sections = {
   ]},
   app_announcements: { title:'إعلانات التطبيق', hint:'رسائل تظهر في التطبيق، تمهيدًا لربطها بخدمة الإشعارات.', table:'app_announcements', columns:['title_ar','is_published','publish_at'], fields:[
     f('title_ar','عنوان الإعلان بالعربية','text',true),f('title_en','عنوان الإعلان بالإنجليزية'),f('message_ar','نص الإعلان بالعربية','textarea',true,true),f('message_en','نص الإعلان بالإنجليزية','textarea',false,true),f('target_url','الرابط عند الضغط','url'),f('is_published','إظهار الإعلان','checkbox'),f('publish_at','موعد النشر','datetime')
-  ]}
+  ]},
+  admin_members: { title:'إدارة المستخدمين', hint:'إضافة أعضاء الإدارة وتحديد أدوارهم. يجب إنشاء حساب المستخدم أولًا في Supabase Auth.', table:'admin_members', columns:['user_id','role','created_at'], fields:[f('user_id','معرّف المستخدم في Supabase Auth (UUID)','text',true,true),f('role','الدور','select',true,false,['editor','owner'])]}
 };
 function f(name,label,type='text',required=false,full=false,options=[]){return {name,label,type,required,full,options};}
-let currentSection='news_posts', editingId=null, currentUser=null, records=[], editionOptions=[];
+let currentSection='news_posts', editingId=null, currentUser=null, currentRole=null, records=[], editionOptions=[];
 
 function showMsg(el,text,type='info'){el.textContent=text;el.className='msg show '+type;}
 function hideMsg(el){el.textContent='';el.className='msg';}
@@ -139,7 +141,7 @@ async function loadEditions(){
 }
 async function loadRecords(){
  const config=sections[currentSection];
- const orderColumn=config.table==='festival_editions'?'year':config.table==='festival_events'?'starts_at':config.table==='workshops'?'starts_at':config.table==='open_calls'?'created_at':config.table==='app_announcements'?'created_at':config.table==='productions'?'sort_order':'created_at';
+ const orderColumn=config.table==='admin_members'?'created_at':config.table==='festival_editions'?'year':config.table==='festival_events'?'starts_at':config.table==='workshops'?'starts_at':config.table==='open_calls'?'created_at':config.table==='app_announcements'?'created_at':config.table==='productions'?'sort_order':'created_at';
  let query=supabase.from(config.table).select('*').order(orderColumn,{ascending:false,nullsFirst:false}).limit(150);
  const {data,error}=await query;if(error)throw error;records=data||[];renderTable();
 }
@@ -158,8 +160,9 @@ function renderTable(){
   config.columns.forEach(col=>{const td=document.createElement('td');let val=row[col];if(col==='status'||col==='is_published'){const badge=document.createElement('span');badge.className='pill '+(String(val));badge.textContent=statusLabel(val);td.append(badge);}else if(col.endsWith('_at')||col.endsWith('_on')){td.textContent=val?new Date(val).toLocaleString('ar-EG'):'—';}else{td.textContent=safeCell(val);if(col==='title_ar'||col==='edition_number')td.className='titlecell';}tr.append(td);});
   const actions=document.createElement('td'),wrap=document.createElement('div');wrap.className='actions';
   const edit=document.createElement('button');edit.className='smallbtn btn-light';edit.textContent='تعديل';edit.addEventListener('click',()=>openEditor(row));
-  const del=document.createElement('button');del.className='smallbtn btn-danger';del.textContent='حذف';del.addEventListener('click',()=>deleteRecord(row.id));
-  wrap.append(edit,del);actions.append(wrap);tr.append(actions);body.append(tr);
+  const del=document.createElement('button');del.className='smallbtn btn-danger';del.textContent='حذف';del.addEventListener('click',()=>deleteRecord(config.table==='admin_members'?row.user_id:row.id));
+  if(currentRole==='owner')wrap.append(edit,del);else wrap.append(edit);
+  actions.append(wrap);tr.append(actions);body.append(tr);
  });
 }
 function makeField(def,value){
@@ -183,9 +186,11 @@ function makeField(def,value){
  wrap.append(input);return wrap;
 }
 async function openEditor(row=null){
- editingId=row?.id||null;hideMsg($('appMsg'));
+ editingId=row?.id||row?.user_id||null;hideMsg($('appMsg'));
  if(currentSection==='festival_events'||currentSection==='workshops'||currentSection==='open_calls')await loadEditions();
- $('formFields').replaceChildren(...sections[currentSection].fields.map(def=>makeField(def,row?.[def.name])));
+ const visibleFields=sections[currentSection].fields.filter(def=>currentRole==='owner'||!['status','is_published','featured'].includes(def.name));
+ $('formFields').replaceChildren(...visibleFields.map(def=>makeField(def,row?.[def.name])));
+ if(currentSection==='admin_members'&&row){const uid=$('formFields').querySelector('[data-field="user_id"]');if(uid)uid.disabled=true;}
  $('editorTitle').textContent=editingId?'تعديل المحتوى':'إضافة محتوى جديد';$('saveBtn').textContent=editingId?'حفظ التعديلات':'حفظ المحتوى';$('editor').classList.add('open');$('editor').scrollIntoView({behavior:'smooth',block:'start'});
 }
 function closeEditor(){$('editor').classList.remove('open');$('recordForm').reset();editingId=null;}
@@ -204,6 +209,11 @@ function readForm(){
  if(currentSection==='news_posts'){
   if(result.body_ar===null||result.body_ar===undefined)result.body_ar='';
   if(result.body_en===null||result.body_en===undefined)result.body_en='';
+ }
+ if(currentRole!=='owner'){
+  if('status' in sections[currentSection].fields.reduce((a,d)=>(a[d.name]=true,a),{}))result.status='draft';
+  if('is_published' in sections[currentSection].fields.reduce((a,d)=>(a[d.name]=true,a),{}))result.is_published=false;
+  if('featured' in sections[currentSection].fields.reduce((a,d)=>(a[d.name]=true,a),{}))result.featured=false;
  }
  // sort_order is NOT NULL in productions; default new records to the end (0).
  if(currentSection==='productions'&&(result.sort_order===null||result.sort_order===undefined))result.sort_order=0;
@@ -224,6 +234,8 @@ async function saveRecord(event){
  finally{btn.disabled=false;}
 }
 async function deleteRecord(id){
+ if(currentRole!=='owner'){showMsg($('appMsg'),'الحذف متاح للمالك فقط.','error');return;}
+ if(currentSection==='admin_members'&&id===currentUser.id){showMsg($('appMsg'),'لا يمكنك إزالة حسابك الحالي من الإدارة.','error');return;}
  if(!confirm('هل أنت متأكد من حذف هذا السجل؟ لا يمكن التراجع عن الحذف.'))return;
  try{const {error}=await supabase.from(sections[currentSection].table).delete().eq('id',id);if(error)throw error;showMsg($('appMsg'),'تم حذف السجل.','ok');await loadRecords();renderStats();}
  catch(e){showMsg($('appMsg'),'تعذر الحذف: '+e.message,'error');}
@@ -235,7 +247,8 @@ async function selectSection(name){
 }
 async function enterApp(user){
  currentUser=user;$('userEmail').textContent=user.email||'';const member=await verifyAdmin(user);
- if(!member){view('noAccessView');return;}
+ if(!member){currentRole=null;view('noAccessView');return;}
+ currentRole=member.role;$('nav').querySelectorAll('.owner-only').forEach(el=>el.classList.toggle('hidden',currentRole!=='owner'));
  view('appView');$('logoutBtn').classList.remove('hidden');renderStats();await selectSection('news_posts');
 }
 async function handleLogin(event){
@@ -244,7 +257,7 @@ async function handleLogin(event){
  catch(e){showMsg($('loginMsg'),'تعذر تسجيل الدخول: '+e.message,'error');}
  finally{button.disabled=false;}
 }
-async function logout(){await supabase.auth.signOut();currentUser=null;$('logoutBtn').classList.add('hidden');$('userEmail').textContent='';view('loginView');}
+async function logout(){await supabase.auth.signOut();currentUser=null;currentRole=null;$('logoutBtn').classList.add('hidden');$('userEmail').textContent='';view('loginView');}
 $('loginForm').addEventListener('submit',handleLogin);
 $('logoutBtn').addEventListener('click',logout);$('noAccessLogout').addEventListener('click',logout);
 $('nav').addEventListener('click',e=>{const btn=e.target.closest('[data-section]');if(btn)selectSection(btn.dataset.section);});
