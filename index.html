@@ -229,7 +229,7 @@ function readForm(){
 }
 async function saveRecord(event){
  event.preventDefault();const btn=$('saveBtn');btn.disabled=true;hideMsg($('appMsg'));
- try{const payload=readForm();let q=supabase.from(sections[currentSection].table);const result=editingId?await q.update(payload).eq('id',editingId).select().single():await q.insert(payload).select().single();if(result.error)throw result.error;showMsg($('appMsg'),editingId?'تم حفظ التعديلات بنجاح.':'تمت إضافة المحتوى بنجاح.','ok');closeEditor();await loadRecords();renderStats();}
+ try{const payload=readForm();let q=supabase.from(sections[currentSection].table);const keyColumn=currentSection==='admin_members'?'user_id':'id';const result=editingId?await q.update(payload).eq(keyColumn,editingId).select().single():await q.insert(payload).select().single();if(result.error)throw result.error;showMsg($('appMsg'),editingId?'تم حفظ التعديلات بنجاح.':'تمت إضافة المحتوى بنجاح.','ok');closeEditor();await loadRecords();renderStats();}
  catch(e){showMsg($('appMsg'),'لم يتم الحفظ: '+(e.message||String(e)),'error');}
  finally{btn.disabled=false;}
 }
@@ -237,7 +237,7 @@ async function deleteRecord(id){
  if(currentRole!=='owner'){showMsg($('appMsg'),'الحذف متاح للمالك فقط.','error');return;}
  if(currentSection==='admin_members'&&id===currentUser.id){showMsg($('appMsg'),'لا يمكنك إزالة حسابك الحالي من الإدارة.','error');return;}
  if(!confirm('هل أنت متأكد من حذف هذا السجل؟ لا يمكن التراجع عن الحذف.'))return;
- try{const {error}=await supabase.from(sections[currentSection].table).delete().eq('id',id);if(error)throw error;showMsg($('appMsg'),'تم حذف السجل.','ok');await loadRecords();renderStats();}
+ try{const {error}=await supabase.from(sections[currentSection].table).delete().eq(currentSection==='admin_members'?'user_id':'id',id);if(error)throw error;showMsg($('appMsg'),'تم حذف السجل.','ok');await loadRecords();renderStats();}
  catch(e){showMsg($('appMsg'),'تعذر الحذف: '+e.message,'error');}
 }
 async function selectSection(name){
