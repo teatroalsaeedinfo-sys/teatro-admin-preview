@@ -199,6 +199,12 @@ function readForm(){
  else value=el.value.trim()||null;
  result[def.name]=value;
  });
+ // The database requires both article body columns to be non-NULL.
+ // Keep the English body optional in the UI, but persist an empty string when omitted.
+ if(currentSection==='news_posts'){
+  if(result.body_ar===null||result.body_ar===undefined)result.body_ar='';
+  if(result.body_en===null||result.body_en===undefined)result.body_en='';
+ }
  if(currentSection==='news_posts'&&result.status==='published'&&!result.published_at)result.published_at=new Date().toISOString();
  if(currentSection==='app_announcements'&&result.is_published&&!result.publish_at)result.publish_at=new Date().toISOString();
  if(currentSection==='festival_events'&&result.edition_id==='')throw new Error('اختر دورة المهرجان المرتبطة بالفعالية.');
